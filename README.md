@@ -31,7 +31,7 @@ For new repositories, you should first set up the webooks, SNS queues, etc. befo
 * Create a KMS encryption key in your AWS console. This key will be used to encrypt and decrypt secrets that your bot will have access to. Be sure, under "Key Users", to add the Lambda Execution Role you made above.
 * Using the GitHub access token and KMS key you just created, make a secret file called githubtoken.secret using the command below. (You will have to install and set up the AWS command line tools to do so.) This file will be decrypted by your script and will only be readable to your AWS account's roles.
 
-	aws kms encrypt --key-id "arn:aws:kms:blahblahblah" --plaintext "github-key-goes-here" --query "CiphertextBlob" --output text | base64 -D > ./githubtoken.secret
+	`aws kms encrypt --key-id "arn:aws:kms:blahblahblah" --plaintext "github-key-goes-here" --query "CiphertextBlob" --output text | base64 -D > ./githubtoken.secret`
 
 * Edit the permissions for your Lambda execution role and your s3 bucket to allow getting, putting and deleting as follows:
 

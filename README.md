@@ -100,7 +100,7 @@ For new repositories, you should first set up the webooks, SNS queues, etc. befo
 
 
 ## To-do
-* **Figure out MIME types and base64 encoding**
+* ~~**Figure out MIME types and base64 encoding**~~
 * **Make the Files loop asynchronous-safe**
 * Validate more end-to-end cases, including accepting pull requests
 * Clean up documentation a bit to see if this Rube Goldberg wiring can be made more straightforward and understandable

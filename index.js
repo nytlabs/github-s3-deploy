@@ -13,6 +13,7 @@ var AWS = require('aws-sdk');
 var util = require('util');
 var fs = require('fs');
 var GitHubApi = require('github');
+var mime = require('mime');
 
 var secretfile = "./githubtoken.secret" 
 // This should be a file containing the github Personal Access Token, encrypted using AWS-KMS and base 64 decoded.
@@ -138,9 +139,14 @@ function s3put(filename, user, repo){
         },
         function store(result, callback){
             //get contents from returned object
-            blob = new Buffer(result.content, 'base64'); //this needs more intelligence about encodings
-            console.log("Contents: ", blob.toString('utf8'));
-            var putparams = { Bucket: s3bucket, Key: filename, Body: blob. };
+            blob = new Buffer(result.content, 'base64');
+            mimetype = mime.lookup(filename);
+            isText = (mime.charsets.lookup(mimetype) == 'UTF-8');
+            if(isText){
+                blob = blob.toString('utf-8');
+            }
+            console.log("putting file of type " + mimetype);
+            var putparams = { Bucket: s3bucket, Key: filename, Body: blob, ContentType: mimetype};
 
             s3client.putObject(putparams, callback);
         }

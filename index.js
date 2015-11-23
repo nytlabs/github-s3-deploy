@@ -138,9 +138,9 @@ function s3put(filename, user, repo){
         },
         function store(result, callback){
             //get contents from returned object
-            blob = new Buffer(result.content, 'base64'); //this may need more intelligence about encodings
+            blob = new Buffer(result.content, 'base64'); //this needs more intelligence about encodings
             console.log("Contents: ", blob.toString('utf8'));
-            var putparams = { Bucket: s3bucket, Key: filename, Body: blob };
+            var putparams = { Bucket: s3bucket, Key: filename, Body: blob. };
 
             s3client.putObject(putparams, callback);
         }

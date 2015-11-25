@@ -21,7 +21,7 @@ var secretfile = "./githubtoken.secret"
 
 var github = new GitHubApi({
     version: '3.0.0',
-    debug: true,
+    debug: false,
     protocol: "https",
     host: "api.github.com"
 });
@@ -34,7 +34,6 @@ exports.handler = function(event, context) {
 	// get the incoming message
 	var githubEvent = event.Records[0].Sns.Message;
 	var mesgattr = event.Records[0].Sns.MessageAttributes;
-    console.log("Got a message: ", JSON.stringify(event, null, 2));
 
     if ((mesgattr.hasOwnProperty('X-Github-Event')) && (mesgattr['X-Github-Event'].Value == "push")) {
         var eventObj = JSON.parse(githubEvent);
@@ -69,7 +68,6 @@ exports.handler = function(event, context) {
             }
             else{
                 // Authenticate to pull code
-                console.log("Token: ", token);
         	    github.authenticate({
         	        type: 'oauth',
         	        token: token
@@ -83,48 +81,81 @@ exports.handler = function(event, context) {
                     }
                     else
                     {
-                        parseCommit(result, user, repo);
-                        //context.succeed();
+                        err = parseCommit(result, user, repo);
+                        if(err) {
+                            context.fail("Parsing the commit failed: " + err);
+                        }
+                        else
+                        {
+                            console.log("Commit parsed and synced successfully.")
+                            context.succeed();
+                        }
                     }
                 }); //end github callback
             }       //end token else
         });         //end decrypt callback
     }               //end if github message
     else {
-        console.log("Turns out I don't care about the message above.");
+        console.log("Message was not a github push message. Exiting.");
         context.succeed();
     }
 }; //end index handler
 
 function parseCommit(resobj, user, repo){
-
     if((resobj.files) && (resobj.files.length >0)) {
-        for (i=0; i<resobj.files.length; i++) {
-            var file = resobj.files[i];
+        // for (i=0; i<resobj.files.length; i++) {
+        //     var file = resobj.files[i];
+        async.each(resobj.files, function(file, callback){
             if(file.status == "removed") {
                 s3delete(file.filename);
             }
             else {
-                s3put(file.filename, user, repo);
+                if(file.status == "renamed") {
+                    s3delete(file.previous_filename);
+                    s3put(file.filename, user, repo);
+                }
+                else
+                {
+                    s3put(file.filename, user, repo);
+                }
             }
-        }
+            //this could be smarter, but whatever. I don't actually want this to break if one file fails.
+            callback();
+        }, function(err){
+            if(err){
+                return err;
+            }
+            else {
+                return null;
+            }
+        });
+        // }
+        // return null;
     }
     else{
         console.log("Commit at " + resobj.html_url + " had no files. Exiting.");
+        context.succeed();
     }
 }
 
 function s3delete(filename){
     console.log("Deleting ", filename);
     var params = { Bucket: s3bucket, Key: filename };
-    s3client.deleteObject(params, function(err,data){
-        if(err) {
-            console.log("Couldn't delete " + filename + ": " + err);
+    
+    async.waterfall([
+        function callDelete(callback){
+            console.log("in call delete");
+            s3client.deleteObject(params, callback);
         }
-        else {
-            console.log("Deleted " + filename + " from " + s3bucket);
+    ], function done(err){
+            if(err) {
+                console.log("Couldn't delete " + filename + ": " + err);
+            }
+            else {
+                console.log("Deleted " + filename + " from " + s3bucket);
+            }
         }
-    });
+    );
 }
 
 function s3put(filename, user, repo){
@@ -145,14 +176,14 @@ function s3put(filename, user, repo){
             if(isText){
                 blob = blob.toString('utf-8');
             }
-            console.log("putting file of type " + mimetype);
+            console.log("putting " + filename + " of type " + mimetype);
             var putparams = { Bucket: s3bucket, Key: filename, Body: blob, ContentType: mimetype};
 
             s3client.putObject(putparams, callback);
         }
     ],  function done(err){
             if (err){
-                console.log("Couldn't store " + filename + " in bucket " + s3bucket + ";" + err);
+                console.log("Couldn't store " + filename + " in bucket " + s3bucket + "; " + err);
             }
             else {
                 console.log("Saved " + filename + " to " + s3bucket + " successfully.");                     

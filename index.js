@@ -102,7 +102,7 @@ exports.handler = function(event, context) {
     }
 }; //end index handler
 
-function parseCommit(resobj, user, repo){
+function parseCommit(resobj, user, repo, callback){
     if((resobj.files) && (resobj.files.length >0)) {
         // for (i=0; i<resobj.files.length; i++) {
         //     var file = resobj.files[i];
@@ -130,7 +130,7 @@ function parseCommit(resobj, user, repo){
 //            this could be smarter, but whatever. I don't actually want this to break if one file fails.
         }, function(err){
             console.log("I should be all done now. Here's what error says: ", err)
-            return err; // 
+            callback(err); // 
         });
 //        }
 //        return null;

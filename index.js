@@ -144,7 +144,6 @@ function s3delete(filename){
     
     async.waterfall([
         function callDelete(callback){
-            console.log("in call delete");
             s3client.deleteObject(params, callback);
         }
     ], function done(err){

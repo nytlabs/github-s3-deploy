@@ -104,8 +104,7 @@ exports.handler = function(event, context) {
 
 function parseCommit(resobj, user, repo, callback){
     if((resobj.files) && (resobj.files.length >0)) {
-        // for (i=0; i<resobj.files.length; i++) {
-        //     var file = resobj.files[i];
+
         async.each(resobj.files, function(file, eachcb){
             if(file.status == "removed") {
                 s3delete(file.filename, eachcb);
@@ -127,17 +126,14 @@ function parseCommit(resobj, user, repo, callback){
                     s3put(file.filename, user, repo, eachcb);
                 }
             }
-//            this could be smarter, but whatever. I don't actually want this to break if one file fails.
         }, function(err){
             console.log("I should be all done now. Here's what error says: ", err)
             callback(err); // 
         });
-//        }
-//        return null;
     }
     else{
         console.log("Commit at " + resobj.html_url + " had no files. Exiting.");
-        context.succeed();
+        callback(new Error('No files in commit object'));
     }
 }
 

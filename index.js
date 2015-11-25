@@ -116,14 +116,14 @@ function parseCommit(resobj, user, repo, callback){
                             s3delete(file.previous_filename, wfcb);
                         },
                         function callputter(wfcb) {
-                            s3put(file.filename, user, repo, wfcb);
+                            s3put(file, user, repo, wfcb);
                         }], function done(err) {
                             eachcb(err);
                         });
                 }
                 else
                 {
-                    s3put(file.filename, user, repo, eachcb);
+                    s3put(file, user, repo, eachcb);
                 }
             }
         }, function(err){
@@ -157,35 +157,35 @@ function s3delete(filename, cb){
     );
 }
 
-function s3put(filename, user, repo, cb){
-    console.log("Storing " + filename);
+function s3put(file, user, repo, cb){
+    console.log("Storing " + file.filename);
 
     async.waterfall([
         function download(callback){
             //call github for file contents
-            console.log("downloading " + filename);
-            var params = { user: user, repo: repo, path: filename };
-            github.repos.getContent(params, callback);
+            console.log("downloading " + file.filename);
+            var params = { user: user, repo: repo, sha: file.sha};
+            github.gitdata.getBlob(params, callback);
         },
         function store(result, callback){
             //get contents from returned object
             blob = new Buffer(result.content, 'base64');
-            mimetype = mime.lookup(filename);
+            mimetype = mime.lookup(file.filename);
             isText = (mime.charsets.lookup(mimetype) == 'UTF-8');
             if(isText){
                 blob = blob.toString('utf-8');
             }
-            console.log("putting " + filename + " of type " + mimetype);
-            var putparams = { Bucket: s3bucket, Key: filename, Body: blob, ContentType: mimetype};
+            console.log("putting " + file.filename + " of type " + mimetype);
+            var putparams = { Bucket: s3bucket, Key: file.filename, Body: blob, ContentType: mimetype};
 
             s3client.putObject(putparams, callback);
         }
     ],  function done(err){
             if (err){
-                console.log("Couldn't store " + filename + " in bucket " + s3bucket + "; " + err);
+                console.log("Couldn't store " + file.filename + " in bucket " + s3bucket + "; " + err);
             }
             else {
-                console.log("Saved " + filename + " to " + s3bucket + " successfully.");                     
+                console.log("Saved " + file.filename + " to " + s3bucket + " successfully.");                     
             }
             cb(); //not passing err here because I don't want to short circuit processing the rest of the array
         }

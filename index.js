@@ -81,15 +81,16 @@ exports.handler = function(event, context) {
                     }
                     else
                     {
-                        err = parseCommit(result, user, repo);
-                        if(err) {
-                            context.fail("Parsing the commit failed: " + err);
-                        }
-                        else
-                        {
-                            console.log("Commit parsed and synced successfully.")
-                            context.succeed();
-                        }
+                        parseCommit(result, user, repo, function(err){
+                            if(err) {
+                                context.fail("Parsing the commit failed: " + err);
+                            }
+                            else
+                            {
+                                console.log("Commit parsed and synced (mostly?) successfully.")
+                                context.succeed();
+                            }
+                        });
                     }
                 }); //end github callback
             }       //end token else
@@ -105,32 +106,34 @@ function parseCommit(resobj, user, repo){
     if((resobj.files) && (resobj.files.length >0)) {
         // for (i=0; i<resobj.files.length; i++) {
         //     var file = resobj.files[i];
-        async.each(resobj.files, function(file, callback){
+        async.each(resobj.files, function(file, eachcb){
             if(file.status == "removed") {
-                s3delete(file.filename);
+                s3delete(file.filename, eachcb);
             }
             else {
                 if(file.status == "renamed") {
-                    s3delete(file.previous_filename);
-                    s3put(file.filename, user, repo);
+                    async.waterfall([
+                        function calldeleter(wfcb) {
+                            s3delete(file.previous_filename, wfcb);
+                        },
+                        function callputter(wfcb) {
+                            s3put(file.filename, user, repo, wfcb);
+                        }], function done(err) {
+                            eachcb(err);
+                        });
                 }
                 else
                 {
-                    s3put(file.filename, user, repo);
+                    s3put(file.filename, user, repo, eachcb);
                 }
             }
-            //this could be smarter, but whatever. I don't actually want this to break if one file fails.
-            callback();
+//            this could be smarter, but whatever. I don't actually want this to break if one file fails.
         }, function(err){
-            if(err){
-                return err;
-            }
-            else {
-                return null;
-            }
+            console.log("I should be all done now. Here's what error says: ", err)
+            return err; // 
         });
-        // }
-        // return null;
+//        }
+//        return null;
     }
     else{
         console.log("Commit at " + resobj.html_url + " had no files. Exiting.");
@@ -138,7 +141,7 @@ function parseCommit(resobj, user, repo){
     }
 }
 
-function s3delete(filename){
+function s3delete(filename, cb){
     console.log("Deleting ", filename);
     var params = { Bucket: s3bucket, Key: filename };
     
@@ -153,11 +156,12 @@ function s3delete(filename){
             else {
                 console.log("Deleted " + filename + " from " + s3bucket);
             }
+            cb(); //not passing err here because I don't want to short circuit processing the rest of the array
         }
     );
 }
 
-function s3put(filename, user, repo){
+function s3put(filename, user, repo, cb){
     console.log("Storing " + filename);
 
     async.waterfall([
@@ -187,6 +191,7 @@ function s3put(filename, user, repo){
             else {
                 console.log("Saved " + filename + " to " + s3bucket + " successfully.");                     
             }
+            cb(); //not passing err here because I don't want to short circuit processing the rest of the array
         }
     );
 }

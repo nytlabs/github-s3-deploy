@@ -30,7 +30,9 @@ var github = new GitHubApi({
 var s3client = new AWS.S3();
 var s3bucket = "internal.nytlabs.com";
  
+// This handler is called by the AWS Lambda controller when a new SNS message arrives.
 exports.handler = function(event, context) {
+    
 	// get the incoming message
 	var githubEvent = event.Records[0].Sns.Message;
 	var mesgattr = event.Records[0].Sns.MessageAttributes;
@@ -47,7 +49,6 @@ exports.handler = function(event, context) {
         console.log("DEFINITELY Got a push message. Will get code from: ", repostring);
         
         // solution borrowed from http://stackoverflow.com/questions/29372278/aws-lambda-how-to-store-secret-to-external-api
-        // REFACTOR THIS TO OCCUR OUTSIDE THE HANDLER!
 
         var encryptedSecret = fs.readFileSync(secretfile);
         var token = null;
@@ -103,6 +104,16 @@ exports.handler = function(event, context) {
 }; //end index handler
 
 function parseCommit(resobj, user, repo, callback){
+    /*
+     *  Brief note: 
+     *      "callback" gets called when the whole commit is parsed
+     *      "eachcb" gets called for each file as it completes processing by the iterator,
+     *      "wfcb" gets called by each step of the "waterfall" so that actions happen in the right order
+     *
+     *  Two of these (eachcb and wfcb) are passed, if appropriate, to the S3 calls so that they can 
+     *  report their own completion.
+     */
+
     if((resobj.files) && (resobj.files.length >0)) {
 
         async.each(resobj.files, function(file, eachcb){
@@ -152,7 +163,8 @@ function s3delete(filename, cb){
             else {
                 console.log("Deleted " + filename + " from " + s3bucket);
             }
-            cb(); //not passing err here because I don't want to short circuit processing the rest of the array
+            cb();   //not passing err here because I don't want to short circuit processing the rest of the array
+                    //also not calling cb until we're actually done, i.e. in the completion step of the waterfall
         }
     );
 }

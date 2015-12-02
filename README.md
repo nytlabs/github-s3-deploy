@@ -91,17 +91,18 @@ For new repositories, you should first set up the webooks, SNS queues, etc. befo
 		]
 	}
 
-* *Finally*, you can deploy the code. On a command line, `cd` into your directory and type `zip -r archive.zip .`, then go to the "Code" tab for your Lambda Function in AWS and upload the zip file.
+* In index.js, change the value in s3bucket to the bucket you want to save your code into. [I'd like to move this to the secrets file for simplicity; see "To-do", below.]
+* *Finally*, you can deploy the code. On a command line, `cd` into your directory and type `zip -r archive.zip .`, then go to the "Code" tab for your Lambda Function in AWS and upload the zip file you just created.
 * You can test execution by making a simple push to your repo, or by using the "Test Service" button in GitHub's Webhooks panel. Testing will resend the last message your repo received, which may or may not be a push depending on your situation. See the CloudWatch logs for more specific information.
 
-## Warning
+## Warnings
 * The `index.js` file must be called that; this is the file that AWS looks for for its `index.handler` call. Changing that name is an exercise left to the reader, as it requires updating several configurations throughout AWS and is probably not worth the effort.
 * Use `npm` to install more modules into your project should you need them. AWS has very few preinstalled modules (AWS being one of them, thankfully). Your `node_modules` directory will always need to be a part of the archive you upload to AWS.
 
 
 ## To-do
-* ~~**Figure out MIME types and base64 encoding**~~
-* **Make the Files loop asynchronous-safe**
+* Figure out MIME types and base64 encoding :white_check_mark:
+* Make the Files loop asynchronous-safe :white_check_mark:
 * Validate more end-to-end cases, including accepting pull requests
 * Clean up documentation a bit to see if this Rube Goldberg wiring can be made more straightforward and understandable
 * Improve / Expand the secrets file framework to have a JSON-oriented structure and multiple secrets / data points

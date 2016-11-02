@@ -29,9 +29,16 @@ For new repositories, you should first set up the webooks, SNS queues, etc. befo
 * In the SNS console, find your Topic and under "Other Topic Actions" choose "Delivery Status". A wizard there will help you set up CloudWatch logging for this code. You can test the wiring at this point to make sure Github messages get all the way through to the log by clicking the "Test Service" button on your GitHub Webhooks screen.
 * Create GitHub credentials for your bot using a "personal access token". For safety's sake, limit the details your bot needs; repo and public_repo are probably all you need, but if you add features (e.g. tag / deployment management, commenting, issue management, etc.) be sure to update the permissions here to grant your script the right levels off access.
 * Create a KMS encryption key in your AWS console. This key will be used to encrypt and decrypt secrets that your bot will have access to. Be sure, under "Key Users", to add the Lambda Execution Role you made above.
-* Using the GitHub access token and KMS key you just created, make a secret file called githubtoken.secret using the command below. (You will have to install and set up the AWS command line tools to do so.) This file will be decrypted by your script and will only be readable to your AWS account's roles.
+* Create a config file in JSON format. Let's call it "config.json". In the file, define the github token and the bucket name you wish to use. Use this format (do NOT change the names of the objects in the file, or else you have to fix it in index.js!)
 
-	`aws kms encrypt --key-id "arn:aws:kms:blahblahblah" --plaintext "github-key-goes-here" --query "CiphertextBlob" --output text | base64 -D > ./githubtoken.secret`
+	{
+		"githubsecrettoken": "<github-token-goes-here>",
+		"s3bucket": "<s3-bucket-goes-here>",
+	}
+
+* Using the config.json file and KMS key you just created, make a secret file called config.json.secret using the command below. If you change the name of the file to something other than "config.json.secret", you need to modify index.js to point to that file. (You will have to install and set up the AWS command line tools to do so.) This file will be decrypted by your script and will only be readable to your AWS account's roles.
+
+	`aws kms encrypt --key-id "arn:aws:kms:blahblahblah" --plaintext fileb://config.js --query "CiphertextBlob" --output text | base64 -D > ./config.js.secret`
 
 * Edit the permissions for your Lambda execution role and your s3 bucket to allow getting, putting and deleting as follows:
 
@@ -97,6 +104,8 @@ For new repositories, you should first set up the webooks, SNS queues, etc. befo
 
 ## Warnings
 * The `index.js` file must be called that; this is the file that AWS looks for for its `index.handler` call. Changing that name is an exercise left to the reader, as it requires updating several configurations throughout AWS and is probably not worth the effort.
+* Please keep the object names in the config.json file, or else you have to modify `index.js` to point to the new names.
+* Keep the encrypted file to `config.json.secret` or you will also have to fix this in your index.js file.
 * Use `npm` to install more modules into your project should you need them. AWS has very few preinstalled modules (AWS being one of them, thankfully). Your `node_modules` directory will always need to be a part of the archive you upload to AWS.
 
 

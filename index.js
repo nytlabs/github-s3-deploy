@@ -15,9 +15,9 @@ var fs = require('fs');
 var GitHubApi = require('github');
 var mime = require('mime');
 
-var secretfile = "./githubtoken.secret" 
-// This should be a file containing the github Personal Access Token, encrypted using AWS-KMS and base 64 decoded.
+// This should be a file containing the configuration parameters, encrypted using AWS-KMS and base 64 decoded.
 // See the README for more detail.
+var secretfile = "./config.json.secret" 
 
 var github = new GitHubApi({
     version: '3.0.0',
@@ -28,7 +28,6 @@ var github = new GitHubApi({
 
 // get reference to S3 client 
 var s3client = new AWS.S3();
-var s3bucket = "internal.nytlabs.com";
  
 // This handler is called by the AWS Lambda controller when a new SNS message arrives.
 exports.handler = function(event, context) {
@@ -48,10 +47,14 @@ exports.handler = function(event, context) {
         
         console.log("DEFINITELY Got a push message. Will get code from: ", repostring);
         
-        // solution borrowed from http://stackoverflow.com/questions/29372278/aws-lambda-how-to-store-secret-to-external-api
+        // new config solution borrowed from http://stackoverflow.com/questions/5869216/how-to-store-node-js-deployment-settings-configuration-files
+        // prior solution borrowed from http://stackoverflow.com/questions/29372278/aws-lambda-how-to-store-secret-to-external-api
 
         var encryptedSecret = fs.readFileSync(secretfile);
+        var decryptedconfig = null;
+        var config = null;
         var token = null;
+        var s3bucket = null;
 
         // get key management client for decrypting secrets
         var kms = new AWS.KMS({region:'us-east-1'});
@@ -61,11 +64,14 @@ exports.handler = function(event, context) {
         kms.decrypt(params, function(err, data) {
             if (err) console.log(err, err.stack);
             else {
-                token = data['Plaintext'].toString();
+                decryptedconfig = data['Plaintext'].toString();
+                config = JSON.parse(decryptedconfig);
+                token = config.githubsecrettoken;
+                s3bucket = config.s3bucket;
             }
 
-            if (!token){
-                context.fail("Couldn't retrieve github token. Exiting.");
+            if (!config){
+                context.fail("Couldn't retrieve config info from the secret config file. Exiting.");
             }
             else{
                 // Authenticate to pull code
@@ -82,7 +88,7 @@ exports.handler = function(event, context) {
                     }
                     else
                     {
-                        parseCommit(result, user, repo, function(err){
+                        parseCommit(result, user, repo, s3bucket, function(err){
                             if(err) {
                                 context.fail("Parsing the commit failed: " + err);
                             }
@@ -103,11 +109,12 @@ exports.handler = function(event, context) {
     }
 }; //end index handler
 
-function parseCommit(resobj, user, repo, callback){
+function parseCommit(resobj, user, repo, s3bucket, callback){
     /*
      *  Brief note: 
      *      "callback" gets called when the whole commit is parsed
      *      "eachcb" gets called for each file as it completes processing by the iterator,
+     *      "s3bucket" is the bucket from the encrypted config file,
      *      "wfcb" gets called by each step of the "waterfall" so that actions happen in the right order
      *
      *  Two of these (eachcb and wfcb) are passed, if appropriate, to the S3 calls so that they can 
@@ -118,23 +125,23 @@ function parseCommit(resobj, user, repo, callback){
 
         async.each(resobj.files, function(file, eachcb){
             if(file.status == "removed") {
-                s3delete(file.filename, eachcb);
+                s3delete(file.filename, s3bucket, eachcb);
             }
             else {
                 if(file.status == "renamed") {
                     async.waterfall([
                         function calldeleter(wfcb) {
-                            s3delete(file.previous_filename, wfcb);
+                            s3delete(file.previous_filename, s3bucket, wfcb);
                         },
                         function callputter(wfcb) {
-                            s3put(file, user, repo, wfcb);
+                            s3put(file, user, repo, s3bucket, wfcb);
                         }], function done(err) {
                             eachcb(err);
                         });
                 }
                 else
                 {
-                    s3put(file, user, repo, eachcb);
+                    s3put(file, user, repo, s3bucket, eachcb);
                 }
             }
         }, function(err){
@@ -148,7 +155,7 @@ function parseCommit(resobj, user, repo, callback){
     }
 }
 
-function s3delete(filename, cb){
+function s3delete(filename, s3bucket, cb){
     console.log("Deleting ", filename);
     var params = { Bucket: s3bucket, Key: filename };
     
@@ -169,7 +176,7 @@ function s3delete(filename, cb){
     );
 }
 
-function s3put(file, user, repo, cb){
+function s3put(file, user, repo, s3bucket, cb){
     console.log("Storing " + file.filename);
 
     async.waterfall([

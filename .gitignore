@@ -1,3 +1,5 @@
 archive.zip
 *.secret
-
+config.js
+config.json
+test.json

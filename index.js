@@ -15,8 +15,8 @@ var fs = require('fs');
 var mime = require('mime');
 var archive = require('github-archive-stream');
 
-const encrypted = process.env['GIT_TOKEN'];
-let decrypted;
+var token = process.env['GIT_TOKEN'];
+// var decrypted;
 
 // get reference to S3 client 
 var s3client = new AWS.S3();
@@ -24,21 +24,21 @@ var s3bucket = process.env.S3_BUCKET;
 
 // This handler is called by the AWS Lambda controller when a new SNS message arrives.
 exports.handler = function(event, context) {
-  if (decrypted) {
+  // if (decrypted) {
     processEvent(event, context);
-  } else {
-    // Decrypt code should run once and variables stored outside of the function
-    // handler so that these are decrypted once per container
-    const kms = new AWS.KMS();
-    kms.decrypt({ CiphertextBlob: new Buffer(encrypted, 'base64') }, (err, data) => {
-      if (err) {
-        console.log('Decrypt error:', err);
-        return callback(err);
-      }
-      decrypted = data.Plaintext.toString('ascii');
-      processEvent(event, context);
-    });
-  }
+  // } else {
+  //   // Decrypt code should run once and variables stored outside of the function
+  //   // handler so that these are decrypted once per container
+  //   const kms = new AWS.KMS();
+  //   kms.decrypt({ CiphertextBlob: new Buffer(encrypted, 'base64') }, (err, data) => {
+  //     if (err) {
+  //       console.log('Decrypt error:', err);
+  //       return callback(err);
+  //     }
+  //     decrypted = data.Plaintext.toString('ascii');
+  //     processEvent(event, context);
+  //   });
+  // }
 };
 
 function processEvent(event, context) {
@@ -46,7 +46,7 @@ function processEvent(event, context) {
   var githubEvent = event.Records[0].Sns.Message;
   var mesgattr = event.Records[0].Sns.MessageAttributes;
 
-  if ((mesgattr.hasOwnProperty('X-Github-Event')) && (mesgattr['X-Github-Event'].Value == "pull_request") && (githubEvent['action'] == "opened")) {
+  if ((mesgattr.hasOwnProperty('X-Github-Event')) && (mesgattr['X-Github-Event'].Value == "pull_request") && (githubEvent.action == "opened")) {
     var eventObj = JSON.parse(githubEvent);
     var re = new RegExp(/([^\/]*)/);
     var found = re.exec(eventObj.repository.full_name);
@@ -57,15 +57,15 @@ function processEvent(event, context) {
 
     console.log("DEFINITELY Got a pull request opened. Will get code from: ", repostring);
 
-    if (!decrypted){
+    if (!token){
       context.fail("Couldn't retrieve github token. Exiting.");
     } else {
 
       var archiveOpts = {
         "auth": {
           "user": user,
-          "token": decrypted
-        }
+          "token": token
+        },
         "repo": repo,
         "ref": sha
       };
@@ -76,6 +76,10 @@ function processEvent(event, context) {
   }           //end if github message
   else {
     console.log("Message was not a github push message. Exiting.");
+    console.log(githubEvent);
+    console.log(mesgattr);
+    console.log(mesgattr['X-Github-Event'].Value);
+    console.log(githubEvent.action);
     context.succeed();
   }
 }; //end index handler

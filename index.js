@@ -71,13 +71,9 @@ function processEvent(event, context) {
         var output = archive(archiveOpts).
           pipe(fs.createWriteStream('/tmp/' + sha + '.tar.gz'));
 
-        fs.readdir("/tmp", (err, files) => {
-          files.forEach(file => {
-            console.log(file);
-          });
+        output.on('close', function() {
+          s3put(output.path);
         });
-
-        s3put(output.path);
       }       //end token else
     }         //end if opened message
     else {
@@ -104,16 +100,14 @@ function s3put(filename){
 
   async.waterfall([
     function store(callback){
-      var file = fs.createReadStream(filename);
-      file.on('error', function (err) {
+      fs.readFile(filename, function(err, data) {
         if (err) { throw err; }
-      });  
-      file.on('open', function () {
-        console.log("putting " + filename);
-        var putparams = { Bucket: s3bucket, Key: filename, Body: file};
-        console.log(putparams);
 
-        s3client.putObject(putparams, callback);
+        s3client.putObject({
+          Bucket: s3bucket,
+          Key: filename,
+          Body: data
+        }, callback);
       });
     }
   ],  function done(err){

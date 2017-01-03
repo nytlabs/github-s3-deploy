@@ -72,7 +72,7 @@ function processEvent(event, context) {
           pipe(fs.createWriteStream('/tmp/' + sha + '.tar.gz'));
 
         output.on('close', function() {
-          s3put(output.path);
+          s3put(output.path, context);
         });
       }       //end token else
     }         //end if opened message
@@ -95,7 +95,7 @@ function processEvent(event, context) {
   }
 }; //end index handler
 
-function s3put(filename){
+function s3put(filename, context){
   console.log("Storing " + filename);
 
   async.waterfall([
@@ -112,10 +112,11 @@ function s3put(filename){
     }
   ],  function done(err){
     if (err){
-      console.log("Couldn't store " + filename + " in bucket " + s3bucket + "; " + err);
+      context.fail("Couldn't store " + filename + " in bucket " + s3bucket + "; " + err);
     }
     else {
       console.log("Saved " + filename + " to " + s3bucket + " successfully.");
+      context.succeed();
     }
   }
   );

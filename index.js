@@ -10,9 +10,7 @@
 // dependencies
 var async = require('async');
 var AWS = require('aws-sdk');
-var util = require('util');
 var fs = require('fs');
-var mime = require('mime');
 var archive = require('github-archive-stream');
 
 var token = process.env['GIT_TOKEN'];
@@ -46,67 +44,84 @@ function processEvent(event, context) {
   var githubEvent = event.Records[0].Sns.Message;
   var mesgattr = event.Records[0].Sns.MessageAttributes;
 
-  if ((mesgattr.hasOwnProperty('X-Github-Event')) && (mesgattr['X-Github-Event'].Value == "pull_request") && (githubEvent.action == "opened")) {
+  if ((mesgattr.hasOwnProperty('X-Github-Event')) && (mesgattr['X-Github-Event'].Value == "pull_request")) {
     var eventObj = JSON.parse(githubEvent);
-    var re = new RegExp(/([^\/]*)/);
-    var found = re.exec(eventObj.repository.full_name);
-    var user = found[0];
-    var repo = eventObj.repository.name;
-    var sha = eventObj.head.sha;
-    var repostring = "/repos/"+user+"/"+repo+"/commits/"+sha
+    if (eventObj.action == "opened") {
+      console.log(eventObj);
+      var re = new RegExp(/([^\/]*)/);
+      var found = re.exec(eventObj.repository.full_name);
+      var user = found[0];
+      var repo = eventObj.repository.full_name;
+      var sha = eventObj.pull_request.head.sha;
 
-    console.log("DEFINITELY Got a pull request opened. Will get code from: ", repostring);
+      console.log("DEFINITELY Got a pull request opened. Will get code from: ", repo);
 
-    if (!token){
-      context.fail("Couldn't retrieve github token. Exiting.");
-    } else {
+      if (!token){
+        context.fail("Couldn't retrieve github token. Exiting.");
+      } else {
 
-      var archiveOpts = {
-        "auth": {
-          "user": user,
-          "token": token
-        },
-        "repo": repo,
-        "ref": sha
-      };
-      var archive = archive(archiveOpts).
-        pipe(fs.createWriteStream(sha + '.tar.gz'));
-      s3put(archive);
-    }       //end token else
-  }           //end if github message
+        var archiveOpts = {
+          "auth": {
+            "user": user,
+            "token": token
+          },
+          "repo": repo,
+          "ref": sha
+        };
+        var output = archive(archiveOpts).
+          pipe(fs.createWriteStream('/tmp/' + sha + '.tar.gz'));
+
+        fs.readdir("/tmp", (err, files) => {
+          files.forEach(file => {
+            console.log(file);
+          });
+        });
+
+        s3put(output.path);
+      }       //end token else
+    }         //end if opened message
+    else {
+      console.log("Message was not a github pull request open. Exiting.");
+      console.log(githubEvent);
+      console.log(mesgattr);
+      console.log(mesgattr['X-Github-Event'].Value);
+      console.log(eventObj.action);
+      context.succeed();
+    }
+  }
   else {
-    console.log("Message was not a github push message. Exiting.");
+    console.log("Message was not a github pull request. Exiting.");
     console.log(githubEvent);
     console.log(mesgattr);
     console.log(mesgattr['X-Github-Event'].Value);
-    console.log(githubEvent.action);
+    console.log(eventObj.action);
     context.succeed();
   }
 }; //end index handler
 
-function s3put(file){
-  console.log("Storing " + file.filename);
+function s3put(filename){
+  console.log("Storing " + filename);
 
   async.waterfall([
     function store(callback){
-      //get contents from returned object
-      blob = new Buffer(file.content, 'base64');
-      mimetype = mime.lookup(file.filename);
-      isText = (mime.charsets.lookup(mimetype) == 'UTF-8');
-      if(isText){
-        blob = blob.toString('utf-8');
-      }
-      console.log("putting " + file.filename + " of type " + mimetype);
-      var putparams = { Bucket: s3bucket, Key: file.filename, Body: blob, ContentType: mimetype};
+      var file = fs.createReadStream(filename);
+      file.on('error', function (err) {
+        if (err) { throw err; }
+      });  
+      file.on('open', function () {
+        console.log("putting " + filename);
+        var putparams = { Bucket: s3bucket, Key: filename, Body: file};
+        console.log(putparams);
 
-      s3client.putObject(putparams, callback);
+        s3client.putObject(putparams, callback);
+      });
     }
   ],  function done(err){
     if (err){
-      console.log("Couldn't store " + file.filename + " in bucket " + s3bucket + "; " + err);
+      console.log("Couldn't store " + filename + " in bucket " + s3bucket + "; " + err);
     }
     else {
-      console.log("Saved " + file.filename + " to " + s3bucket + " successfully.");
+      console.log("Saved " + filename + " to " + s3bucket + " successfully.");
     }
   }
   );

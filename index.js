@@ -13,8 +13,8 @@ var AWS = require('aws-sdk');
 var fs = require('fs');
 var archive = require('github-archive-stream');
 
-var token = process.env['GIT_TOKEN'];
-// var decrypted;
+var encryptedToken = process.env['GIT_TOKEN'];
+var decrypted;
 
 // get reference to S3 client 
 var s3client = new AWS.S3();
@@ -22,21 +22,21 @@ var s3bucket = process.env.S3_BUCKET;
 
 // This handler is called by the AWS Lambda controller when a new SNS message arrives.
 exports.handler = function(event, context) {
-  // if (decrypted) {
+  if (decrypted) {
     processEvent(event, context);
-  // } else {
-  //   // Decrypt code should run once and variables stored outside of the function
-  //   // handler so that these are decrypted once per container
-  //   const kms = new AWS.KMS();
-  //   kms.decrypt({ CiphertextBlob: new Buffer(encrypted, 'base64') }, (err, data) => {
-  //     if (err) {
-  //       console.log('Decrypt error:', err);
-  //       return callback(err);
-  //     }
-  //     decrypted = data.Plaintext.toString('ascii');
-  //     processEvent(event, context);
-  //   });
-  // }
+  } else {
+    // Decrypt code should run once and variables stored outside of the function
+    // handler so that these are decrypted once per container
+    const kms = new AWS.KMS();
+    kms.decrypt({ CiphertextBlob: new Buffer(encryptedToken, 'base64') }, (err, data) => {
+      if (err) {
+        console.log('Decrypt error:', err);
+        return callback(err);
+      }
+      decrypted = data.Plaintext.toString('ascii');
+      processEvent(event, context);
+    });
+  }
 };
 
 function processEvent(event, context) {
@@ -56,14 +56,14 @@ function processEvent(event, context) {
 
       console.log("DEFINITELY Got a pull request opened. Will get code from: ", repo);
 
-      if (!token){
+      if (!decrypted){
         context.fail("Couldn't retrieve github token. Exiting.");
       } else {
 
         var archiveOpts = {
           "auth": {
             "user": user,
-            "token": token
+            "token": decrypted
           },
           "repo": repo,
           "ref": sha

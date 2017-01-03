@@ -1,3 +1,4 @@
 archive.zip
 *.secret
-
+.DS_STORE
+stream.tar.gz
